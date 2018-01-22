@@ -1,2 +1,6 @@
 
 demos/
+
+garbage_notebooks/
+
+*.pyc
