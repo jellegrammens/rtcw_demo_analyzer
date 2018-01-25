@@ -156,9 +156,9 @@ def get_sec(time_str):
     return int(m) * 60 + int(s)
 
 
-def get_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, verbose = True):
+def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, verbose = True):
     '''
-    Function that outputs spree
+    Function that outputs kill sprees
 
     parameters:
     - df: dataframe with obituaries
@@ -237,7 +237,7 @@ def get_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, verbos
                         spreecounter += 1
                         temp_sprees.append(frag[3])
 
-                #if not, add a value to every list with spree details 
+                #if not, add a value to every list with spree details if minspree is met / reinitilize spreecounter and temp_sprees
                 else:
                     if spreecounter >= minspree:
                         pd_md5.append(demo)
@@ -270,6 +270,8 @@ def get_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, verbos
             if verbose:
                 print 'scanned ' + str(counter) + ' demos of ' + str(total_demos) + ' demos in total'
 
+    'all done!'
+
 
     #make final dataframe where 1 row is a spree with all the necessary info
     df_spree = pd.DataFrame(
@@ -281,3 +283,50 @@ def get_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, verbos
     })
 
     return df_spree
+
+def locate_demo_path(demos_dct, spree, root_path):
+    '''
+    helper function that outputs the path to the demo that we want to cut
+    '''
+    for k in demos_dct:
+        if spree.md5 in demos_dct[k][0]:
+            match_folder = k
+            demo_loc = [i for i in range(len(demos_dct[k][0])) if demos_dct[k][0][i]==spree.md5]
+            demo_name = demos_dct[k][1][demo_loc[0]]
+            
+            return match_folder, demo_name
+
+def cutter_exe_cmd(root_path, match_folder, demo_name, start_time, end_time, 
+                   demo_folder_name = 'demos', output_folder = 'output_spree_demos', cut_type = 1):
+    '''
+    helper function to create string with demo_path and parameters to input in anders libtech 3 api
+    parameters: 
+    - demo_path: full path to demo
+    - parameters_dct: a dictionary with all the parameters necessary
+    '''
+    demo_path = os.path.join(root_path, demo_folder_name, match_folder, demo_name)
+    output_path = os.path.join(root_path, output_folder, demo_name)
+    
+    s = 'cut ' + demo_path + ' '
+    s += output_path + ' '
+    s += str(start_time) + ' '
+    s += str(end_time) + ' '
+    s += str(cut_type) + ' 0' # plus the zero at the end or the api will crash
+
+    return s
+
+def cut_demos(root_path, demos_dct, df_spree, exe_name, offset_start = 5000, offset_end = 5000):
+
+    for row in range(len(df_spree)):
+
+        spree = df_spree.loc[row]
+        match_folder, demo_name = locate_demo_path(demos_dct, spree, root_path)
+
+        start_time = spree.start - offset_start
+        end_time = spree.end + offset_end
+
+        parameters = cutter_exe_cmd(root_path, match_folder, demo_name, start_time, end_time, 
+                                    demo_folder_name = 'demos', output_folder = 'output_spree_demos', cut_type = 1)
+
+        os.system(exe_path + ' ' + parameters)
+
