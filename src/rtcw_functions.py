@@ -233,7 +233,7 @@ def convert_names(x):
     return x
 
 
-def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, verbose = True):
+def get_kill_sprees(df, maxtime_secs = 30, include_weapon_filter = None, exclude_weapon_filter = None, minspree = 3, verbose = True):
     '''
     Function that outputs kill sprees
 
@@ -245,7 +245,8 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
     - df: dataframe with obituaries
     - weapons_enum: dictionary with the key as weapon names and values of the weapon numbers in RTCW
     - maxtime_secs: max time in seconds to get a spree
-    - weapon_filter: list with weapon_filters, check weapons_enum.py for the correct naming to use
+    - include_weapon_filter: list with allowed weapons for the spree, check weapons_enum.py for the correct naming to use
+    - exclude_weapon_filter: list with non-allowed weapons for the spree, check weapons_enum.py for the correct naming to use
     - minspree: minimum amount of enemy players killed within a certain timeframe (maxtime_secs)
     - verbose: output prints for every 100 demos analyzed
 
@@ -272,13 +273,23 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
     pd_match_name = []
     pd_player_name = []
 
-    #filter the dataframe if we have a weapon filter
-    if weapon_filter != None:
+    #filter the dataframe if we have include weapon filter
+    if exclude_weapon_filter != None:
         weapon_numbers_filter = []
-        for weapon in weapon_filter:
+        for weapon in exclude_weapon_filter:
+            weapon_numbers_filter.append(weapons_enum[weapon])
+        weapon_numbers_filter = [item for sublist in weapon_numbers_filter for item in sublist]
+        df = df.loc[~df['bWeapon'].isin(weapon_numbers_filter)].copy()
+
+    #filter the dataframe if we have include weapon filter
+    if include_weapon_filter != None:
+        weapon_numbers_filter = []
+        for weapon in include_weapon_filter:
             weapon_numbers_filter.append(weapons_enum[weapon])
         weapon_numbers_filter = [item for sublist in weapon_numbers_filter for item in sublist]
         df = df.loc[df['bWeapon'].isin(weapon_numbers_filter)].copy()
+
+
 
     #helper variables for verbose
     counter = 0
@@ -491,7 +502,7 @@ def generate_capture_list(df_spree, transform_to_dm_60 = True):
         config = etree.Element('config')
 
         id.text = '-1'
-        selected.text = 'No'
+        selected.text = 'Yes'
         localOffset.text = '0'
         demoPath.text = spree.output_name
         startFrame.text = str(spree.start - 50000)
