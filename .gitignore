@@ -6,3 +6,7 @@ garbage_notebooks/
 *.pyc
 
 output_spree_demos/
+
+*.db
+
+*.xml

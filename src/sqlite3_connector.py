@@ -14,6 +14,7 @@ class sqlite3_connector:
  
     def connect_to_db(self):
         self.db = sqlite3.connect(self.path_to_db)
+        self.db.text_factory = str #return strs instead of automatically trying to decode the str with the UTF-8 codec.
  
     def execute_query(self, query, attempt_count=0):
         cursor = self.db.cursor()

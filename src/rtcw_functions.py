@@ -2,6 +2,7 @@ import os
 import hashlib
 import pandas as pd
 import numpy as np 
+from lxml import etree
 
 ##########################
 # FUNCTIONS TO PARSE DEMOS
@@ -150,6 +151,74 @@ def fill_db(root_path, parameters_dct, demos_dct, demo_folder_name = 'demos', ex
 # FUNCTIONS TO ANALYZE DEMOS
 ############################
 
+def add_match_data(obituary_df, player_df, demos_dct):
+    '''
+    Add match information to the obituaries to possibily filter on later. 
+    Important note: only works if you have my rtcw demo folder naming system.
+    '''
+    pd_md5 = []
+    pd_match = []
+    pd_demo = []
+
+    for md5 in obituary_df.szMd5.unique():
+        for k in demos_dct:
+            if md5 in demos_dct[k][0]:
+                demo_loc = [i for i in range(len(demos_dct[k][0])) if demos_dct[k][0][i]==md5]
+                demo_name = demos_dct[k][1][demo_loc[0]]
+                pd_md5.append(md5)
+                pd_match.append(k)
+                pd_demo.append(demo_name)
+
+
+    pd_date = []
+    pd_league = []
+    pd_teama = []
+    pd_teamb = []
+    pd_importance = []
+    pd_shoutcast = []
+
+    for match in pd_match:
+        splitted = match.split('_')
+        pd_date.append(splitted[1])
+        pd_league.append(splitted[2])
+        pd_teama.append(splitted[3])
+        if len(splitted) > 5:
+            pd_teamb.append(splitted[5])
+        else:
+            pd_teamb.append(None)
+        if len(splitted) > 6:
+            pd_importance.append(splitted[6])
+        else:
+            pd_importance.append(None)
+        if len(splitted) > 7:
+            pd_shoutcast.append(True)
+        else:
+            pd_shoutcast.append(False)
+            
+            
+
+    md5_match_link = pd.DataFrame(
+    {'szMd5': pd_md5,
+     'matchName': pd_match,
+     'demoName': pd_demo,
+     'League': pd_league,
+     'Date' : pd_date,
+     'TeamA' : pd_teama,
+     'TeamB' : pd_teamb,
+     'Importance': pd_importance,
+     'Shoutcast': pd_shoutcast
+    })
+
+    md5_match_link['Date'] = pd.to_datetime(md5_match_link['Date'])
+
+    obituary_df = pd.merge(obituary_df, md5_match_link, how = 'left', on = 'szMd5')
+
+    player_df = player_df[['szMd5', 'szCleanName', 'bClientNum']].copy()
+    player_df.rename(columns = {'bClientNum':'bAttacker'}, inplace=True)
+    obituary_df = pd.merge(obituary_df, player_df, how = 'left', on = ['szMd5', 'bAttacker'])
+
+    return obituary_df
+
 def get_sec(time_str):
     '''function currently not used anywhere but handy for shiny app later'''
     m, s = time_str.split(':')
@@ -159,6 +228,10 @@ def get_sec(time_str):
 def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, verbose = True):
     '''
     Function that outputs kill sprees
+
+    TO BE ADDED:
+    - weapon exclusion filter
+    - include / exclude / only teamkill
 
     parameters:
     - df: dataframe with obituaries
@@ -186,10 +259,8 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
     pd_start_dwtime = []
     pd_end_dwtime = []
     pd_spree_length = []
-
-    #helper variables for verbose
-    counter = 0
-    total_demos = df.szMd5.nunique()
+    pd_demo_name = []
+    pd_player_name = []
 
     #filter the dataframe if we have a weapon filter
     if weapon_filter != None:
@@ -199,12 +270,18 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
         weapon_numbers_filter = [item for sublist in weapon_numbers_filter for item in sublist]
         df = df.loc[df['bWeapon'].isin(weapon_numbers_filter)].copy()
 
+    #helper variables for verbose
+    counter = 0
+    total_demos = df.szMd5.nunique()
+
     for demo in df.szMd5.unique():
         df_demo = df.loc[df['szMd5'] == demo]
+        demo_name = df_demo.demoName.unique()
         counter += 1
         
         for player in df_demo.bAttacker.unique():
             df_cut = df_demo.loc[df['bAttacker'] == player]
+            player_name = df_cut.szCleanName.unique()
             arr = df_cut.as_matrix(columns = ['bAttacker', 'bTarget', 'bIsTeamkill', 'dwTime'])
 
             timerestriction = maxtime_secs * 1000 #put it in seconds for rtcw time
@@ -245,6 +322,8 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
                         pd_start_dwtime.append(temp_sprees[0])
                         pd_end_dwtime.append(temp_sprees[-1])
                         pd_spree_length.append(spreecounter)
+                        pd_demo_name.append(demo_name[0])
+                        pd_player_name.append(player_name[0])
 
                     if (frag[0] != frag[1]) and (frag[2] != 1):
                         spreecounter = 1
@@ -265,12 +344,14 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
                         pd_start_dwtime.append(temp_sprees[0])
                         pd_end_dwtime.append(temp_sprees[-1])
                         pd_spree_length.append(spreecounter)
+                        pd_demo_name.append(demo_name[0])
+                        pd_player_name.append(player_name[0])
 
         if counter % 100 == 0:
             if verbose:
                 print 'scanned ' + str(counter) + ' demos of ' + str(total_demos) + ' demos in total'
 
-    'all done!'
+    print 'all done!'
 
 
     #make final dataframe where 1 row is a spree with all the necessary info
@@ -279,7 +360,9 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
      'attacker': pd_attacker,
      'start': pd_start_dwtime,
      'end': pd_end_dwtime,
-     'spreecount': pd_spree_length
+     'spreecount': pd_spree_length,
+     'demo': pd_demo_name,
+     'player': pd_player_name
     })
 
     return df_spree
@@ -315,18 +398,20 @@ def cutter_exe_cmd(root_path, match_folder, demo_name, start_time, end_time,
 
     return s
 
-def cut_demos(root_path, demos_dct, df_spree, exe_name, offset_start = 5000, offset_end = 5000):
+def cut_demos(root_path, demos_dct, df_spree, offset_start = 5, offset_end = 5, 
+    demo_folder_name = 'demos', output_folder = 'output_spree_demos', exe_name = 'Anders.Gaming.LibTech3.exe', cut_type = 1):
 
     for row in range(len(df_spree)):
 
         spree = df_spree.loc[row]
+        exe_path = os.path.join(root_path, exe_name)
         match_folder, demo_name = locate_demo_path(demos_dct, spree, root_path)
 
-        start_time = spree.start - offset_start
-        end_time = spree.end + offset_end
+        start_time = spree.start - (offset_start * 1000)
+        end_time = spree.end + (offset_end * 1000)
 
         parameters = cutter_exe_cmd(root_path, match_folder, demo_name, start_time, end_time, 
-                                    demo_folder_name = 'demos', output_folder = 'output_spree_demos', cut_type = 1)
+                                    demo_folder_name = demo_folder_name, output_folder = output_folder, cut_type = cut_type)
 
         os.system(exe_path + ' ' + parameters)
 
