@@ -222,7 +222,7 @@ def add_match_data(obituary_df, player_df, demos_dct):
     return obituary_df
 
 def get_sec(time_str):
-    '''function currently not used anywhere but handy for shiny app later'''
+    '''function currently not used anywhere but handy for shiny/dash app later'''
     m, s = time_str.split(':')
     return int(m) * 60 + int(s)
 
@@ -399,6 +399,10 @@ def get_kill_sprees(df, maxtime_secs = 30, weapon_filter = None, minspree = 3, v
 
     return df_spree
 
+########################
+# FUNCTIONS TO CUT DEMOS
+########################
+
 def locate_demo_path(demos_dct, spree, root_path):
     '''
     helper function that outputs the path to the demo that we want to cut
@@ -413,6 +417,9 @@ def locate_demo_path(demos_dct, spree, root_path):
 
 
 def generate_output_name(spree, transform_to_dm_60):
+    '''
+    Helper function to create a filename for a cut demo
+    '''
     #output_name = spree['match'] + '_' +  spree['demo'][:-6] + '_' + spree['player'] + '_' + spree['weapons'] + str(spree['start']) + spree['demo'][-6:]
     output_name = spree['demo'][:-6] + '_' + spree['player'] + '_' + spree['weapons'] + str(spree['start']) + spree['demo'][-6:]
     
@@ -428,9 +435,6 @@ def cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_ti
                    demo_folder_name = 'demos', output_folder = 'output_spree_demos', cut_type = 1):
     '''
     helper function to create string with demo_path and parameters to input in anders libtech 3 api
-    parameters: 
-    - demo_path: full path to demo
-    - parameters_dct: a dictionary with all the parameters necessary
     '''
     demo_path = os.path.join(root_path, demo_folder_name, match_folder, demo_name)
     output_demo_name = generate_output_name(spree, transform_to_dm_60)
@@ -447,6 +451,9 @@ def cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_ti
 
 def cut_demos(root_path, demos_dct, df_spree, offset_start = 5, offset_end = 5, transform_to_dm_60 = True,
     demo_folder_name = 'demos', output_folder = 'output_spree_demos', exe_name = 'Anders.Gaming.LibTech3.exe', cut_type = 1):
+    '''
+    Function that cuts demos. Offset variables are used to start cut x seconds before and x seconds after the spree
+    '''
 
     for row in range(len(df_spree)):
         spree = df_spree.loc[row]
@@ -463,7 +470,7 @@ def cut_demos(root_path, demos_dct, df_spree, offset_start = 5, offset_end = 5, 
 
 def generate_capture_list(df_spree, transform_to_dm_60 = True):
     '''
-    Function that makes a xml capture list to be imported in crumb's his demoviewer
+    Function that makes a xml capture list to be imported in crumb's his demoviewer. transform_to_dm_60 is used to either save older protocol demos to .dm_60 extension
     '''
     
     df_spree['output_name'] = df_spree.apply(lambda x: generate_output_name(x, transform_to_dm_60), axis=1).values
