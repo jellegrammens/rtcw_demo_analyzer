@@ -10,3 +10,5 @@ output_spree_demos/
 *.db
 
 *.xml
+
+demos2/
