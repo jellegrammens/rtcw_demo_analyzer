@@ -5,6 +5,7 @@ import numpy as np
 from lxml import etree
 from goldfinch import validFileName
 from lxml import etree
+import shutil
 
 ##########################
 # FUNCTIONS TO PARSE DEMOS
@@ -523,3 +524,44 @@ def generate_capture_list(df_spree, transform_to_dm_60 = True):
         
     tree = etree.ElementTree(captureList)
     tree.write('C:\Users\JelleGrammens\Documents\capture_list.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+def recordings_to_avi(vdub_folder, screenshots_folder, output_folder, vdub_exe, vdub_configfile, remove_screenshots = True):
+	'''
+	Function to make all tga screenshot recordings to avi's
+	'''
+
+	vdub_path = os.path.join(vdub_folder, vdub_exe)
+	vdubconfig_path = os.path.join(vdub_folder, vdub_configfile)
+	cmdline = vdub_path + ' /s ' + vdubconfig_path
+	recordings = os.listdir(screenshots_folder)
+
+	for rec in recordings:
+	    tgafolder = os.listdir(os.path.join(screenshots_folder, rec))[0]
+	    tgastartname = os.listdir(os.path.join(screenshots_folder, rec, tgafolder))[3]
+	    vdubinputloc = os.path.join(screenshots_folder, rec, tgafolder, tgastartname)
+	    outputfilename = rec[:-6] + '.avi'
+	    vduboutputloc = os.path.join(output_folder, outputfilename)
+	    vdubinputline = 'VirtualDub.Open("' + vdubinputloc + '",0,0);\n'
+	    vduboutputline = 'VirtualDub.SaveAVI("' + vduboutputloc + '");\n'
+	    vdubinputline = vdubinputline.replace('\\', '\\\\')
+	    vduboutputline = vduboutputline.replace('\\', '\\\\')
+
+	    
+	    #replace lines in cfg file for input and output
+	    with open(vdubconfig_path) as f:
+	        lines = f.readlines()
+	    
+	    lines[0] = vdubinputline
+	    lines[-2] = vduboutputline
+
+	    with open(vdubconfig_path, "w") as f:
+	        f.writelines(lines)
+	        
+	    #make avi
+	    print 'rendering ' + rec
+	    os.system(cmdline)
+	    
+	    if remove_screenshots:
+	        shutil.rmtree(os.path.join(screenshots_folder, rec))
+
+	print 'all done!'

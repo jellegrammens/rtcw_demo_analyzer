@@ -1,0 +1,23 @@
+VirtualDub.Open("C:\\Users\\Jelle\\Documents\\VirtualDub-1.10.4\\20180213195141\\0000000000.tga",0,0);
+VirtualDub.audio.SetSource(0);
+VirtualDub.audio.SetMode(0);
+VirtualDub.audio.SetInterleave(1,500,1,0,0);
+VirtualDub.audio.SetClipMode(1,1);
+VirtualDub.audio.SetEditMode(1);
+VirtualDub.audio.SetConversion(0,0,0,0,0);
+VirtualDub.audio.SetVolume();
+VirtualDub.audio.SetCompression();
+VirtualDub.audio.EnableFilterGraph(0);
+VirtualDub.video.SetInputFormat(0);
+VirtualDub.video.SetOutputFormat(7);
+VirtualDub.video.SetMode(3);
+VirtualDub.video.SetSmartRendering(0);
+VirtualDub.video.SetPreserveEmptyFrames(0);
+VirtualDub.video.SetFrameRate2(60,1,1);
+VirtualDub.video.SetIVTC(0, 0, 0, 0);
+VirtualDub.video.SetCompression();
+VirtualDub.video.filters.Clear();
+VirtualDub.audio.filters.Clear();
+VirtualDub.SaveAVI("C:\\Users\\Jelle\\Documents\\VirtualDub-1.10.4\\0000000000-New.avi");
+VirtualDub.Close();
+
