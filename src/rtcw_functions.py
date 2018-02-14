@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np 
 from lxml import etree
 from goldfinch import validFileName
-from lxml import etree
 import shutil
 
 ##########################
@@ -480,7 +479,7 @@ def cut_demos(root_path, demos_dct, df_spree, offset_start = 5, offset_end = 5, 
 
         os.system(exe_path + ' ' + parameters)
 
-def generate_capture_list(df_spree, transform_to_dm_60 = True):
+def generate_capture_list(df_spree, folder ='C:\Users\Jelle\Documents', name = 'capture_list.xml', transform_to_dm_60 = True):
     '''
     Function that makes a xml capture list to be imported in crumb's his demoviewer. transform_to_dm_60 is used to either save older protocol demos to .dm_60 extension
     '''
@@ -523,7 +522,7 @@ def generate_capture_list(df_spree, transform_to_dm_60 = True):
         captureList.append(capture)
         
     tree = etree.ElementTree(captureList)
-    tree.write('C:\Users\JelleGrammens\Documents\capture_list.xml', pretty_print=True, xml_declaration=True, encoding="utf-8")
+    tree.write(os.path.join(folder,name), pretty_print=True, xml_declaration=True, encoding="utf-8")
 
 def recordings_to_avi(vdub_folder, screenshots_folder, output_folder, vdub_exe, vdub_configfile, remove_screenshots = True):
 	'''
