@@ -3,8 +3,10 @@ import hashlib
 import pandas as pd
 import numpy as np 
 from lxml import etree
+from xml.etree import ElementTree
 from goldfinch import validFileName
 import shutil
+import glob
 
 ##########################
 # FUNCTIONS TO PARSE DEMOS
@@ -153,7 +155,7 @@ def fill_db(root_path, parameters_dct, demos_dct, demo_folder_name = 'demos', ex
 # FUNCTIONS TO ANALYZE DEMOS
 ############################
 
-def add_match_data(obituary_df, player_df, demos_dct):
+def add_match_data(obituary_df, player_df, demo_df, demos_dct):
     '''
     Add match information to the obituaries to possibily filter on later. 
     Important note: only works if you have my rtcw demo folder naming system.
@@ -216,8 +218,10 @@ def add_match_data(obituary_df, player_df, demos_dct):
     obituary_df = pd.merge(obituary_df, md5_match_link, how = 'left', on = 'szMd5')
 
     player_df = player_df[['szMd5', 'szCleanName', 'bClientNum']].copy()
+    demo_df = demo_df[['szMd5', 'szPOVName']].copy()
     player_df.rename(columns = {'bClientNum':'bAttacker'}, inplace=True)
     obituary_df = pd.merge(obituary_df, player_df, how = 'left', on = ['szMd5', 'bAttacker'])
+    obituary_df = pd.merge(obituary_df, demo_df, how ='left', on = 'szMd5')
 
     return obituary_df
 
@@ -233,7 +237,7 @@ def convert_names(x):
     return x
 
 
-def get_kill_sprees(df, maxtime_secs = 30, include_weapon_filter = None, exclude_weapon_filter = None, minspree = 3, verbose = True):
+def get_kill_sprees(df, maxtime_secs = 30, include_weapon_filter = None, exclude_weapon_filter = None, minspree = 3, pov_sprees_only = False, verbose = True):
     '''
     Function that outputs kill sprees
 
@@ -289,6 +293,7 @@ def get_kill_sprees(df, maxtime_secs = 30, include_weapon_filter = None, exclude
         weapon_numbers_filter = [item for sublist in weapon_numbers_filter for item in sublist]
         df = df.loc[df['bWeapon'].isin(weapon_numbers_filter)].copy()
 
+    #filter on only pov player
 
 
     #helper variables for verbose
@@ -521,6 +526,48 @@ def generate_capture_list(df_spree, folder ='C:\Users\Jelle\Documents', name = '
 
         captureList.append(capture)
         
+    tree = etree.ElementTree(captureList)
+    tree.write(os.path.join(folder,name), pretty_print=True, xml_declaration=True, encoding="utf-8")
+
+def merge_capture_lists(folder ='C:/Users/Jelle/Documents/GIT/rtcw_demo_analyzer/xml', name = 'capture_list_merged.xml', transform_to_dm_60 = True):
+    '''
+    Function that merges several capture lists in one big capture list. 
+    '''
+    captureList = etree.Element('CaptureList')
+    xml_files = glob.glob(folder +"/*.xml")
+
+    for xml_file in xml_files:
+        for data in ElementTree.parse(xml_file).getroot():
+            capture = etree.Element('capture')
+            id = etree.Element('id')
+            demoPath = etree.Element('demoPath')
+            startFrame = etree.Element('startFrame')
+            stopFrame = etree.Element('stopFrame')
+            localOffset = etree.Element('localOffset')
+            selected = etree.Element('selected')
+            playerPov = etree.Element('playerPov')
+            config = etree.Element('config')
+
+            id.text = data.find('id').text
+            selected.text = data.find('selected').text
+            localOffset.text = data.find('localOffset').text
+            demoPath.text = data.find('demoPath').text
+            startFrame.text = data.find('startFrame').text
+            stopFrame.text = data.find('stopFrame').text
+            playerPov.text = data.find('playerPov').text
+            config.text = data.find('config').text
+
+            capture.append(id)
+            capture.append(demoPath)
+            capture.append(startFrame)
+            capture.append(stopFrame)
+            capture.append(localOffset)
+            capture.append(selected)
+            capture.append(playerPov)
+            capture.append(config)
+
+            captureList.append(capture)
+
     tree = etree.ElementTree(captureList)
     tree.write(os.path.join(folder,name), pretty_print=True, xml_declaration=True, encoding="utf-8")
 

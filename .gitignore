@@ -12,3 +12,19 @@ output_spree_demos/
 *.xml
 
 demos2/
+
+*.dm_60
+
+*.txt
+
+*.pk3
+
+*.bat
+
+*.mp3
+
+*.avi
+
+notebooks/003\. analyze and cut demos qcon03\.ipynb
+
+notebooks/002\. make dictionary and fill db qcon03\.ipynb
