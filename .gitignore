@@ -28,3 +28,5 @@ demos2/
 notebooks/003\. analyze and cut demos qcon03\.ipynb
 
 notebooks/002\. make dictionary and fill db qcon03\.ipynb
+
+*.xlsx
