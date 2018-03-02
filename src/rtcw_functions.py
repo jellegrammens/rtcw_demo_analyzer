@@ -452,12 +452,15 @@ def locate_demo_path(demos_dct, spree, root_path):
 			return match_folder, demo_name
 
 
-def generate_output_name(spree, transform_to_dm_60):
+def generate_output_name(spree, demo_type = 'kill', transform_to_dm_60 = True):
 	'''
 	Helper function to create a filename for a cut demo
 	'''
 	#output_name = spree['match'] + '_' +  spree['demo'][:-6] + '_' + spree['player'] + '_' + spree['weapons'] + str(spree['start']) + spree['demo'][-6:]
-	output_name = spree['demo'][:-6] + '_' + spree['player'] + '_' + spree['weapons'] + str(spree['start']) + spree['demo'][-6:]
+	if demo_type == 'kill':
+		output_name = spree['demo'][:-6] + '_' + spree['player'] + '_' + spree['weapons'] + str(spree['start']) + spree['demo'][-6:]
+	if demo_type == 'docs':
+		output_name = spree['demo'][:-6] + '_' + str(spree['duration']) + '_' + str(spree['start_secsleft']) + '_' + str(spree['end_secsleft']) + '_' + str(spree['won_round']) + '_' + str(spree['start']) + spree['demo'][-6:] 
 	
 	if transform_to_dm_60:
 		output_name = output_name[:-2] + '60'
@@ -467,13 +470,13 @@ def generate_output_name(spree, transform_to_dm_60):
 	
 	return output_name
 
-def cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_time, transform_to_dm_60 = True, 
+def cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_time, demo_type = 'kill', transform_to_dm_60 = True, 
 				   demo_folder_name = 'demos', output_folder = 'output_spree_demos', cut_type = 1):
 	'''
 	helper function to create string with demo_path and parameters to input in anders libtech 3 api
 	'''
 	demo_path = os.path.join(root_path, demo_folder_name, match_folder, demo_name)
-	output_demo_name = generate_output_name(spree, transform_to_dm_60)
+	output_demo_name = generate_output_name(spree, demo_type, transform_to_dm_60)
 
 	output_path = os.path.join(root_path, output_folder, output_demo_name)
 	
@@ -485,21 +488,21 @@ def cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_ti
 
 	return s
 
-def cut_demos(root_path, demos_dct, df_spree, offset_start = 5, offset_end = 5, transform_to_dm_60 = True,
+def cut_demos(root_path, demos_dct, df_spree, demo_type = 'kill', offset_start = 5, offset_end = 5, transform_to_dm_60 = True,
 	demo_folder_name = 'demos', output_folder = 'output_spree_demos', exe_name = 'Anders.Gaming.LibTech3.exe', cut_type = 1):
 	'''
 	Function that cuts demos. Offset variables are used to start cut x seconds before and x seconds after the spree
 	'''
 
 	for row in range(len(df_spree)):
-		spree = df_spree.loc[row]
+		spree = df_spree.iloc[row]
 		exe_path = os.path.join(root_path, exe_name)
 		match_folder, demo_name = locate_demo_path(demos_dct, spree, root_path)
 
 		start_time = spree.start - (offset_start * 1000)
 		end_time = spree.end + (offset_end * 1000)
 
-		parameters = cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_time, transform_to_dm_60 = transform_to_dm_60,
+		parameters = cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_time, demo_type = demo_type, transform_to_dm_60 = transform_to_dm_60,
 									demo_folder_name = demo_folder_name, output_folder = output_folder, cut_type = cut_type)
 
 		os.system(exe_path + ' ' + parameters)
@@ -651,33 +654,33 @@ def hh_mm_ss2seconds(x):
 
 def map_docrun_events(x):
 
-    if x in DocsStolen:
-        d = 1
-    elif x in DocsReturned:
-        d = 0
-    elif x in DocsTransmitted:
-        d = 2
-    else:
-        d = -1
+	if x in DocsStolen:
+		d = 1
+	elif x in DocsReturned:
+		d = 0
+	elif x in DocsTransmitted:
+		d = 2
+	else:
+		d = -1
 
-    return d
-        
+	return d
+		
 def map_dynamite_events(x):
 
-    if x in DynamitePlanted:
-        d = 1
-    elif x in DynamiteDefused:
-        d = 0
-    elif x in DynamiteExploded:
-        d = 2
-    elif x == 'Arming dynamite...':
-    	d = 3
-    elif x == 'Defusing dynamite...':
-    	d = 4
-    else:
-        d = -1
+	if x in DynamitePlanted:
+		d = 1
+	elif x in DynamiteDefused:
+		d = 0
+	elif x in DynamiteExploded:
+		d = 2
+	elif x == 'Arming dynamite...':
+		d = 3
+	elif x == 'Defusing dynamite...':
+		d = 4
+	else:
+		d = -1
 
-    return d
+	return d
 
 def feature_extraction_chat(chatmessages_df):
 	'''
@@ -701,3 +704,123 @@ def feature_extraction_chat(chatmessages_df):
 	chatmessages_df['DynamiteEvents'] = chatmessages_df.szMessage.apply(lambda x: map_dynamite_events(x))
 
 	return chatmessages_df
+
+def get_docruns(chatmessages_df, min_docrun_length = None, max_timeleft = None, docs_succesful = None, min_docs_lost = None, verbose = True):
+	
+	#empty lists that we will populate and use to make final df
+	pd_md5 = []
+	pd_start_docrun_dwtime = []
+	pd_end_docrun_dwtime = []
+	pd_start_docrun_secsleft = []
+	pd_end_docrun_secsleft = []
+	pd_docrun_duration = []
+	pd_times_docs_lost = []
+	pd_won_round = []
+	pd_demo_name = []
+	pd_match_name = []
+	
+	#helper variables for verbose
+	counter = 0
+	total_demos = chatmessages_df.szMd5.nunique()
+	
+	for demo in chatmessages_df.szMd5.unique():
+		#evt hier nog cutten op timelimit hit of docsevents zoals cell hierboven voor speed
+		df_demo = chatmessages_df.loc[(chatmessages_df['szMd5'] == demo) & (chatmessages_df['InMatch'])]
+		demo_name = df_demo.demoName.unique()
+		match_name = df_demo.matchName.unique()
+		counter += 1
+		
+		arr = df_demo.as_matrix(columns = ['DocsEvents', 'TimelimitHit', 'dwTime', 'SecondsLeftInRound'])
+		taken_docs_bool = False
+		docs_lost_times = 0
+		
+		for row in range(len(arr)):
+			chat = arr[row, :]
+			
+			#taken docs
+			if chat[0] == 1:
+				if taken_docs_bool == False: 
+					start_dwtime = chat[2]
+					start_timeleft = chat[3]
+					taken_docs_bool = True
+				else:
+					docs_lost_times += 1
+
+			#transmitted docs
+			if chat[0] == 2:
+				end_dwtime = chat[2]
+				end_timeleft = chat[3]
+				taken_docs_bool = False
+				docs_succes = True
+				
+				pd_md5.append(demo)
+				pd_start_docrun_dwtime.append(start_dwtime)
+				pd_end_docrun_dwtime.append(end_dwtime)
+				pd_start_docrun_secsleft.append(start_timeleft)
+				pd_end_docrun_secsleft.append(end_timeleft)
+				pd_docrun_duration.append(start_timeleft - end_timeleft)
+				pd_times_docs_lost.append(docs_lost_times)
+				pd_won_round.append(docs_succes)
+				pd_demo_name.append(demo_name[0])
+				pd_match_name.append(match_name[0])
+			
+				docs_lost_times = 0
+				
+			#returned docs / timelimit hit
+			if ((chat[0] == 0 or chat[1] == 1) and (taken_docs_bool == True)):
+				end_dwtime = chat[2]
+				end_timeleft = chat[3]
+				taken_docs_bool = False
+				docs_succes = False
+				
+				pd_md5.append(demo)
+				pd_start_docrun_dwtime.append(start_dwtime)
+				pd_end_docrun_dwtime.append(end_dwtime)
+				pd_start_docrun_secsleft.append(start_timeleft)
+				pd_end_docrun_secsleft.append(end_timeleft)
+				pd_docrun_duration.append(start_timeleft - end_timeleft)
+				pd_times_docs_lost.append(docs_lost_times)
+				pd_won_round.append(docs_succes)
+				pd_demo_name.append(demo_name[0])
+				pd_match_name.append(match_name[0])
+				
+				docs_lost_times = 0
+				
+			#if demo stopped before end of docrun
+			
+			
+		#verbose shizzle
+		if counter % 100 == 0:
+			if verbose:
+				print 'scanned ' + str(counter) + ' demos of ' + str(total_demos) + ' demos in total' 
+	
+	print 'all done!'
+	
+	
+	#make final dataframe where 1 row is a spree with all the necessary info
+	df_docs = pd.DataFrame(
+	{'md5': pd_md5,
+	 'start': pd_start_docrun_dwtime,
+	 'end': pd_end_docrun_dwtime,
+	 'start_secsleft': pd_start_docrun_secsleft,
+	 'end_secsleft': pd_end_docrun_secsleft,
+	 'duration': pd_docrun_duration,
+	 'times_lost_docs': pd_times_docs_lost,
+	 'won_round': pd_won_round,
+	 'demo': pd_demo_name,
+	 'match': pd_match_name,
+	})
+	
+	if min_docrun_length != None:
+		df_docs = df_docs.loc[df_docs['duration'] >= min_docrun_length]
+		
+	if max_timeleft != None:
+		df_docs = df_docs.loc[df_docs['end_secsleft'] <= max_timeleft]
+		
+	if docs_succesful != None:
+		df_docs = df_docs.loc[df_docs['won_round'] == docs_succesful]
+		
+	if min_docs_lost != None:
+		df_docs = df_docs.loc[df_docs['times_lost_docs'] >= min_docs_lost]
+		
+	return df_docs     
