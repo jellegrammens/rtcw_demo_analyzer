@@ -7,6 +7,18 @@ from xml.etree import ElementTree
 from goldfinch import validFileName
 import shutil
 import glob
+import re
+
+
+#import lists with info
+from chathelper import DocsStolen
+from chathelper import DocsReturned
+from chathelper import DocsTransmitted
+from chathelper import DocsAll
+from chathelper import DynamitePlanted
+from chathelper import DynamiteDefused
+from chathelper import DynamiteExploded
+from chathelper import DynamiteAll
 
 ##########################
 # FUNCTIONS TO PARSE DEMOS
@@ -157,16 +169,16 @@ def fill_db(root_path, parameters_dct, demos_dct, demo_folder_name = 'demos', ex
 # FUNCTIONS TO ANALYZE DEMOS
 ############################
 
-def add_match_data(obituary_df, player_df, demos_dct):
+def add_match_data(df, player_df, demos_dct, what_df = 'obituary_df'):
 	'''
-	Add match information to the obituaries to possibily filter on later. 
+	Add match information to a db df to possibily filter on later. 
 	Important note: only works if you have my rtcw demo folder naming system.
 	'''
 	pd_md5 = []
 	pd_match = []
 	pd_demo = []
 
-	for md5 in obituary_df.szMd5.unique():
+	for md5 in df.szMd5.unique():
 		for k in demos_dct:
 			if md5 in demos_dct[k][0]:
 				demo_loc = [i for i in range(len(demos_dct[k][0])) if demos_dct[k][0][i]==md5]
@@ -217,18 +229,18 @@ def add_match_data(obituary_df, player_df, demos_dct):
 
 	md5_match_link['Date'] = pd.to_datetime(md5_match_link['Date'])
 
-	obituary_df = pd.merge(obituary_df, md5_match_link, how = 'left', on = 'szMd5')
+	df = pd.merge(df, md5_match_link, how = 'left', on = 'szMd5')
 
 	player_df = player_df[['szMd5', 'szCleanName', 'bClientNum']].copy()
 	player_df.rename(columns = {'bClientNum':'bAttacker'}, inplace=True)
-	obituary_df = pd.merge(obituary_df, player_df, how = 'left', on = ['szMd5', 'bAttacker'])
 
-	return obituary_df
+	if what_df == 'obituary_df':
+		df = pd.merge(df, player_df, how = 'left', on = ['szMd5', 'bAttacker'])
 
-def get_sec(time_str):
-	'''function currently not used anywhere but handy for shiny/dash app later'''
-	m, s = time_str.split(':')
-	return int(m) * 60 + int(s)
+	#if what_df == 'chatmessages_df':
+		#df = pd.merge(df, player_df, how = 'left', left_on = ['szMd5', 'bPlayer'], right_on = ['szMd5', 'bAttacker'])
+
+	return df
 
 def convert_names(x):
 	'''helper function to create valid player names for files later'''
@@ -588,7 +600,6 @@ def recordings_to_avi(vdub_folder, screenshots_folder, output_folder, vdub_exe, 
 	'''
 	Function to make all tga screenshot recordings to avi's
 	'''
-
 	vdub_path = os.path.join(vdub_folder, vdub_exe)
 	vdubconfig_path = os.path.join(vdub_folder, vdub_configfile)
 	cmdline = vdub_path + ' /s ' + vdubconfig_path
@@ -624,3 +635,69 @@ def recordings_to_avi(vdub_folder, screenshots_folder, output_folder, vdub_exe, 
 			shutil.rmtree(os.path.join(screenshots_folder, rec))
 
 	print 'all done!'
+
+
+
+def hh_mm_ss2seconds(x):
+	'''
+	Function that splits szTimeString to seconds left in round
+	'''
+	if x in ('Warmup', 'Countdown', 'Intermission', ''):
+		s = -1
+	else:
+		s = reduce(lambda acc, x: acc*60 + x, map(int, x.split(':')))
+
+	return s
+
+def map_docrun_events(x):
+
+    if x in DocsStolen:
+        d = 1
+    elif x in DocsReturned:
+        d = 0
+    elif x in DocsTransmitted:
+        d = 2
+    else:
+        d = -1
+
+    return d
+        
+def map_dynamite_events(x):
+
+    if x in DynamitePlanted:
+        d = 1
+    elif x in DynamiteDefused:
+        d = 0
+    elif x in DynamiteExploded:
+        d = 2
+    elif x == 'Arming dynamite...':
+    	d = 3
+    elif x == 'Defusing dynamite...':
+    	d = 4
+    else:
+        d = -1
+
+    return d
+
+def feature_extraction_chat(chatmessages_df):
+	'''
+	Function that adds columns with various information about a chatmessage
+	'''
+
+	#create boolean columns
+	chatmessages_df['WTV'] = chatmessages_df.szMessage.apply(lambda x: bool(re.search('\([0-9]+\):', x))) #wtv chat is typical a string like: 'playername (wtvclientnumb): message'
+	chatmessages_df['WTV'] = chatmessages_df['WTV'].astype(int)
+	chatmessages_df['DocsAll'] = chatmessages_df.szMessage.isin(DocsAll).astype(int)
+	chatmessages_df['DynamiteAll'] = chatmessages_df.szMessage.isin(DynamiteAll).astype(int)
+	chatmessages_df['TimelimitHit'] = chatmessages_df.szMessage == 'Timelimit hit.'
+	chatmessages_df['TimelimitHit'] = chatmessages_df.TimelimitHit.astype(int)
+	chatmessages_df['InMatch'] = ~chatmessages_df['szTimeString'].isin(['Warmup', 'Countdown', 'Intermission', ''])
+	chatmessages_df['InMatch'] = chatmessages_df['InMatch'].astype(int)
+	#create seconds left in round integer variable
+	chatmessages_df['SecondsLeftInRound'] = chatmessages_df.szTimeString.apply(lambda x: hh_mm_ss2seconds(x))
+
+	#map docrun events
+	chatmessages_df['DocsEvents'] = chatmessages_df.szMessage.apply(lambda x: map_docrun_events(x))
+	chatmessages_df['DynamiteEvents'] = chatmessages_df.szMessage.apply(lambda x: map_dynamite_events(x))
+
+	return chatmessages_df
