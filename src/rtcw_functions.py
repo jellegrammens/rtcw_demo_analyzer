@@ -193,7 +193,6 @@ def add_match_data(df, player_df, demos_dct, what_df = 'obituary_df'):
 	pd_teama = []
 	pd_teamb = []
 	pd_importance = []
-	pd_shoutcast = []
 
 	for match in pd_match:
 		splitted = match.split('_')
@@ -208,10 +207,6 @@ def add_match_data(df, player_df, demos_dct, what_df = 'obituary_df'):
 			pd_importance.append(splitted[6])
 		else:
 			pd_importance.append(None)
-		if len(splitted) > 7:
-			pd_shoutcast.append(True)
-		else:
-			pd_shoutcast.append(False)
 			
 			
 
@@ -224,12 +219,13 @@ def add_match_data(df, player_df, demos_dct, what_df = 'obituary_df'):
 	 'TeamA' : pd_teama,
 	 'TeamB' : pd_teamb,
 	 'Importance': pd_importance,
-	 'Shoutcast': pd_shoutcast
 	})
 
 	md5_match_link['Date'] = pd.to_datetime(md5_match_link['Date'])
 
 	df = pd.merge(df, md5_match_link, how = 'left', on = 'szMd5')
+
+	df['Shoutcast'] = df['matchName'].str.endswith('_sc')
 
 	player_df = player_df[['szMd5', 'szCleanName', 'bClientNum']].copy()
 	player_df.rename(columns = {'bClientNum':'bAttacker'}, inplace=True)
@@ -426,12 +422,14 @@ def get_kill_sprees(obituary_df, demo_df, maxtime_secs = 30, include_weapon_filt
 	 'pov_id': pd_demo_pov
 	})
 
-	#convert player names to valid names for windows filenaming
-	df_spree['player'] = df_spree.player.apply(lambda x: convert_names(x))
+	if len(df_spree):
 
-	#make sure a buggy demo is not in there
-	df_spree = df_spree.loc[df_spree['match'] != 'rtcw_2003.06.25_qcon03-qual_gmpo_vs_clan-carnage_round2'].copy()
-	df_spree.reset_index(drop=True, inplace=True)
+		#convert player names to valid names for windows filenaming
+		df_spree['player'] = df_spree.player.apply(lambda x: convert_names(x))
+
+		#make sure a buggy demo is not in there
+		df_spree = df_spree.loc[df_spree['match'] != 'rtcw_2003.06.25_qcon03-qual_gmpo_vs_clan-carnage_round2'].copy()
+		df_spree.reset_index(drop=True, inplace=True)
 
 	return df_spree
 
@@ -512,17 +510,19 @@ def cut_demos(root_path, demos_dct, df_spree, demo_type = 'kill', offset_start =
 # MISCELLANEOUS
 ###############
 
-def generate_capture_list(df_spree, folder ='C:\Users\Jelle\Documents', name = 'capture_list.xml', transform_to_dm_60 = True):
+def generate_capture_list(df_spree, folder ='C:\Users\Jelle\Documents', demo_type = 'kill', name = 'capture_list.xml', transform_to_dm_60 = True):
 	'''
-	Function that makes a xml capture list to be imported in crumb's his demoviewer. transform_to_dm_60 is used to either save older protocol demos to .dm_60 extension
+	Function that makes a xml capture list to be imported in crumbs his demoviewer. transform_to_dm_60 is used to either save older protocol demos to .dm_60 extension
 	'''
 	
-	df_spree['output_name'] = df_spree.apply(lambda x: generate_output_name(x, transform_to_dm_60), axis=1).values
+	df_spree['output_name'] = df_spree.apply(lambda x: generate_output_name(x, demo_type, transform_to_dm_60), axis=1).values
 	
 	captureList = etree.Element('CaptureList')
 
 	for row in range(len(df_spree)):
-		spree = df_spree.loc[row]
+		spree = df_spree.iloc[row]
+		if demo_type != 'kill':
+			spree.attacker = '-1'
 
 		capture = etree.Element('capture')
 		id = etree.Element('id')
