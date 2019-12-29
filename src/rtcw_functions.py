@@ -8,6 +8,7 @@ from goldfinch import validFileName
 import shutil
 import glob
 import re
+from scipy import stats
 
 
 #import lists with info
@@ -124,7 +125,7 @@ def indexer_exe_cmd(demo_path, parameters_dct):
 	s += '/exportChatMessages/' + parameters_dct['exportChatMessages']
 	s += '/exportJson/' + parameters_dct['exportJson']
 	s += '/exportSQL/' + parameters_dct['exportSQL']
-	s += '/exportPaths' + parameters_dct['exportPaths']
+	s += '/exportPaths/' + parameters_dct['exportPaths']
 	
 	if parameters_dct['exportSQL'] == '1':
 		s += '/exportSQLFile/' + parameters_dct['exportSQLFile']
@@ -250,7 +251,6 @@ def get_kill_sprees(obituary_df, demo_df, maxtime_secs = 30, include_weapon_filt
 	Function that outputs kill sprees
 
 	TO BE ADDED:
-	- weapon exclusion filter
 	- include / exclude / only teamkill
 
 	parameters:
@@ -460,6 +460,9 @@ def generate_output_name(spree, demo_type = 'kill', transform_to_dm_60 = True):
 	if demo_type == 'docs':
 		output_name = spree['demo'][:-6] + '_' + str(spree['duration']) + '_' + str(spree['start_secsleft']) + '_' + str(spree['end_secsleft']) + '_' + str(spree['won_round']) + '_' + str(spree['start']) + spree['demo'][-6:] 
 	
+	if demo_type == 'wtv':
+		output_name = spree['demo'][:-6] + '_' + str(spree['start']) + '_' + spree['demo'][-6:]
+
 	if transform_to_dm_60:
 		output_name = output_name[:-2] + '60'
 
@@ -824,3 +827,75 @@ def get_docruns(chatmessages_df, min_docrun_length = None, max_timeleft = None, 
 		df_docs = df_docs.loc[df_docs['times_lost_docs'] >= min_docs_lost]
 		
 	return df_docs     
+
+def get_wtvmoments(chatmessages_df, z = 5, window = 10, verbose=True):
+    pd_md5 = []
+    pd_start_wtv = []
+    pd_end_wtv = []
+    pd_demo_name = []
+    pd_match_name = []
+    
+    #helper variables for verbose
+    counter = 0
+    total_demos = chatmessages_df.szMd5.nunique()
+
+    for demo in chatmessages_df.szMd5.unique():
+        df_demo = chatmessages_df.loc[(chatmessages_df['szMd5'] == demo) & (chatmessages_df['WTV'] == 1)]
+        if len(df_demo) > 0:
+            demo_name = df_demo.demoName.unique()
+            match_name = df_demo.matchName.unique()
+            counter += 1
+
+            df_demo['sec'] = df_demo['dwTime'] / 1000
+            df_demo['sec'] = df_demo['sec'].astype(int)
+            df_demo.sort_values('sec', inplace=True)
+            cnt = df_demo.groupby('sec').count()['szMessage'].reset_index()
+            cnt.rename(columns = {'szMessage': 'count'}, inplace=True)
+
+            # extrapolate and put zeros for seconds where there is no wtv chat
+            base = pd.DataFrame(range(cnt['sec'].min(), cnt['sec'].max() + 1))
+            base.rename(columns = {0:'sec'}, inplace=True)
+            base['count'] = 0
+            cnt = base.merge(cnt, how = 'left', on = 'sec')
+            cnt['count'] = cnt['count_y'].fillna(0)
+            cnt = cnt[['sec', 'count']]
+
+            # find z-scores
+            cnt['z'] = np.abs(stats.zscore(cnt['count']))
+
+            # subset z-scores above certain threshold
+            cnt = cnt[cnt['z']> z]
+
+            # keep observations that fall in certain time window
+            prev = 0
+            lst = []
+            for i in cnt['sec']:
+                if i - prev > window:
+                    lst.append(i)
+                prev = i
+                
+            for i in lst:     
+                pd_md5.append(demo)
+                pd_start_wtv.append(i * 1000)
+                pd_end_wtv.append(i * 1000)
+                pd_demo_name.append(demo_name[0])
+                pd_match_name.append(match_name[0])
+                
+            #verbose shizzle
+        if counter % 100 == 0:
+            if verbose:
+                print 'scanned ' + str(counter) + ' demos of ' + str(total_demos) + ' demos in total' 
+
+    print 'all done!'
+
+
+    #make final dataframe where 1 row is a spree with all the necessary info
+    df_wtv = pd.DataFrame(
+    {'md5': pd_md5,
+     'start': pd_start_wtv,
+     'end': pd_end_wtv,
+     'demo': pd_demo_name,
+     'match': pd_match_name,
+    })     
+    
+    return df_wtv
