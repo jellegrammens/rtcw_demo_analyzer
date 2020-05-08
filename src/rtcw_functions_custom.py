@@ -187,45 +187,13 @@ def add_match_data(df, player_df, demos_dct, what_df = 'obituary_df'):
 				pd_match.append(k)
 				pd_demo.append(demo_name)
 
-
-	pd_date = []
-	pd_league = []
-	pd_teama = []
-	pd_teamb = []
-	pd_importance = []
-
-	for match in pd_match:
-		splitted = match.split('_')
-		pd_date.append(splitted[1])
-		pd_league.append(splitted[2])
-		pd_teama.append(splitted[3])
-		if len(splitted) > 5:
-			pd_teamb.append(splitted[5])
-		else:
-			pd_teamb.append(None)
-		if len(splitted) > 6:
-			pd_importance.append(splitted[6])
-		else:
-			pd_importance.append(None)
-			
-			
-
 	md5_match_link = pd.DataFrame(
 	{'szMd5': pd_md5,
 	 'matchName': pd_match,
-	 'demoName': pd_demo,
-	 'League': pd_league,
-	 'Date' : pd_date,
-	 'TeamA' : pd_teama,
-	 'TeamB' : pd_teamb,
-	 'Importance': pd_importance,
+	 'demoName': pd_demo
 	})
 
-	md5_match_link['Date'] = pd.to_datetime(md5_match_link['Date'])
-
 	df = pd.merge(df, md5_match_link, how = 'left', on = 'szMd5')
-
-	df['Shoutcast'] = df['matchName'].str.endswith('_sc')
 
 	player_df = player_df[['szMd5', 'szCleanName', 'bClientNum']].copy()
 	player_df.rename(columns = {'bClientNum':'bAttacker'}, inplace=True)
@@ -233,8 +201,6 @@ def add_match_data(df, player_df, demos_dct, what_df = 'obituary_df'):
 	if what_df == 'obituary_df':
 		df = pd.merge(df, player_df, how = 'left', on = ['szMd5', 'bAttacker'])
 
-	#if what_df == 'chatmessages_df':
-		#df = pd.merge(df, player_df, how = 'left', left_on = ['szMd5', 'bPlayer'], right_on = ['szMd5', 'bAttacker'])
 
 	return df
 
@@ -504,6 +470,7 @@ def cut_demos(root_path, demos_dct, df_spree, demo_type = 'kill', offset_start =
 
 		parameters = cutter_exe_cmd(root_path, match_folder, demo_name, spree, start_time, end_time, demo_type = demo_type, transform_to_dm_60 = transform_to_dm_60,
 									demo_folder_name = demo_folder_name, output_folder = output_folder, cut_type = cut_type)
+
 		os.system(exe_path + ' ' + parameters)
 
 
@@ -526,7 +493,7 @@ def generate_capture_list(df_spree, folder ='C:\Users\Jelle\Documents', demo_typ
 			spree.attacker = '-1'
 
 		if not follow_mode:
-			spree.atacker = '-1'
+			spree.attacker = '-1'
 
 		capture = etree.Element('capture')
 		id = etree.Element('id')
