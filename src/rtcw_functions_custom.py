@@ -287,6 +287,7 @@ def get_kill_sprees(obituary_df, demo_df, maxtime_secs = 30, include_weapon_filt
 		for player in df_demo.bAttacker.unique():
 			df_cut = df_demo.loc[obituary_df['bAttacker'] == player]
 			player_name = df_cut.szCleanName.unique()
+			df_cut = df_cut.sort_values('dwTime') 
 			arr = df_cut.as_matrix(columns = ['bAttacker', 'bTarget', 'bIsTeamkill', 'dwTime', 'bWeapon'])
 
 			timerestriction = maxtime_secs * 1000 #put it in seconds for rtcw time
@@ -428,6 +429,9 @@ def generate_output_name(spree, demo_type = 'kill', transform_to_dm_60 = True):
 	if demo_type == 'wtv':
 		output_name = spree['demo'][:-6] + '_' + str(spree['start']) + '_' + spree['demo'][-6:]
 
+	if demo_type == 'hs':
+		output_name = spree['demo'][:-6] + '_' + spree['player'] + '_' + str(spree['start']) + spree['demo'][-6:]
+
 	if transform_to_dm_60:
 		output_name = output_name[:-2] + '60'
 
@@ -489,7 +493,7 @@ def generate_capture_list(df_spree, folder ='C:\Users\Jelle\Documents', demo_typ
 
 	for row in range(len(df_spree)):
 		spree = df_spree.iloc[row]
-		if demo_type != 'kill':
+		if demo_type not in ('kill', 'hs'): 
 			spree.attacker = '-1'
 
 		if not follow_mode:
@@ -797,73 +801,208 @@ def get_docruns(chatmessages_df, min_docrun_length = None, max_timeleft = None, 
 	return df_docs     
 
 def get_wtvmoments(chatmessages_df, z = 5, window = 10, verbose=True):
-    pd_md5 = []
-    pd_start_wtv = []
-    pd_end_wtv = []
-    pd_demo_name = []
-    pd_match_name = []
-    
-    #helper variables for verbose
-    counter = 0
-    total_demos = chatmessages_df.szMd5.nunique()
+	pd_md5 = []
+	pd_start_wtv = []
+	pd_end_wtv = []
+	pd_demo_name = []
+	pd_match_name = []
+	
+	#helper variables for verbose
+	counter = 0
+	total_demos = chatmessages_df.szMd5.nunique()
 
-    for demo in chatmessages_df.szMd5.unique():
-        df_demo = chatmessages_df.loc[(chatmessages_df['szMd5'] == demo) & (chatmessages_df['WTV'] == 1)]
-        if len(df_demo) > 0:
-            demo_name = df_demo.demoName.unique()
-            match_name = df_demo.matchName.unique()
-            counter += 1
+	for demo in chatmessages_df.szMd5.unique():
+		df_demo = chatmessages_df.loc[(chatmessages_df['szMd5'] == demo) & (chatmessages_df['WTV'] == 1)]
+		if len(df_demo) > 0:
+			demo_name = df_demo.demoName.unique()
+			match_name = df_demo.matchName.unique()
+			counter += 1
 
-            df_demo['sec'] = df_demo['dwTime'] / 1000
-            df_demo['sec'] = df_demo['sec'].astype(int)
-            df_demo.sort_values('sec', inplace=True)
-            cnt = df_demo.groupby('sec').count()['szMessage'].reset_index()
-            cnt.rename(columns = {'szMessage': 'count'}, inplace=True)
+			df_demo['sec'] = df_demo['dwTime'] / 1000
+			df_demo['sec'] = df_demo['sec'].astype(int)
+			df_demo.sort_values('sec', inplace=True)
+			cnt = df_demo.groupby('sec').count()['szMessage'].reset_index()
+			cnt.rename(columns = {'szMessage': 'count'}, inplace=True)
 
-            # extrapolate and put zeros for seconds where there is no wtv chat
-            base = pd.DataFrame(range(cnt['sec'].min(), cnt['sec'].max() + 1))
-            base.rename(columns = {0:'sec'}, inplace=True)
-            base['count'] = 0
-            cnt = base.merge(cnt, how = 'left', on = 'sec')
-            cnt['count'] = cnt['count_y'].fillna(0)
-            cnt = cnt[['sec', 'count']]
+			# extrapolate and put zeros for seconds where there is no wtv chat
+			base = pd.DataFrame(range(cnt['sec'].min(), cnt['sec'].max() + 1))
+			base.rename(columns = {0:'sec'}, inplace=True)
+			base['count'] = 0
+			cnt = base.merge(cnt, how = 'left', on = 'sec')
+			cnt['count'] = cnt['count_y'].fillna(0)
+			cnt = cnt[['sec', 'count']]
 
-            # find z-scores
-            cnt['z'] = np.abs(stats.zscore(cnt['count']))
+			# find z-scores
+			cnt['z'] = np.abs(stats.zscore(cnt['count']))
 
-            # subset z-scores above certain threshold
-            cnt = cnt[cnt['z']> z]
+			# subset z-scores above certain threshold
+			cnt = cnt[cnt['z']> z]
 
-            # keep observations that fall in certain time window
-            prev = 0
-            lst = []
-            for i in cnt['sec']:
-                if i - prev > window:
-                    lst.append(i)
-                prev = i
-                
-            for i in lst:     
-                pd_md5.append(demo)
-                pd_start_wtv.append(i * 1000)
-                pd_end_wtv.append(i * 1000)
-                pd_demo_name.append(demo_name[0])
-                pd_match_name.append(match_name[0])
-                
-            #verbose shizzle
-        if counter % 100 == 0:
-            if verbose:
-                print 'scanned ' + str(counter) + ' demos of ' + str(total_demos) + ' demos in total' 
+			# keep observations that fall in certain time window
+			prev = 0
+			lst = []
+			for i in cnt['sec']:
+				if i - prev > window:
+					lst.append(i)
+				prev = i
+				
+			for i in lst:     
+				pd_md5.append(demo)
+				pd_start_wtv.append(i * 1000)
+				pd_end_wtv.append(i * 1000)
+				pd_demo_name.append(demo_name[0])
+				pd_match_name.append(match_name[0])
+				
+			#verbose shizzle
+		if counter % 100 == 0:
+			if verbose:
+				print 'scanned ' + str(counter) + ' demos of ' + str(total_demos) + ' demos in total' 
 
-    print 'all done!'
+	print 'all done!'
 
 
-    #make final dataframe where 1 row is a spree with all the necessary info
-    df_wtv = pd.DataFrame(
-    {'md5': pd_md5,
-     'start': pd_start_wtv,
-     'end': pd_end_wtv,
-     'demo': pd_demo_name,
-     'match': pd_match_name,
-    })     
-    
-    return df_wtv
+	#make final dataframe where 1 row is a spree with all the necessary info
+	df_wtv = pd.DataFrame(
+	{'md5': pd_md5,
+	 'start': pd_start_wtv,
+	 'end': pd_end_wtv,
+	 'demo': pd_demo_name,
+	 'match': pd_match_name,
+	})     
+	
+	return df_wtv
+
+def get_headshot_sprees(bulletevent_df, demo_df, maxtime_secs = 3, minspree = 3, pov_sprees_only = False, verbose = True):
+	#import the weapons_enum
+	from weapons_enum import weapons_enum
+
+	#empty lists that we will populate and use to make final df_spree 
+	pd_md5 = []
+	pd_attacker = []
+	pd_start_dwtime = []
+	pd_end_dwtime = []
+	pd_spree_length = []
+	pd_demo_name = []
+	pd_match_name = []
+	pd_player_name = []
+	pd_demo_pov = []
+
+	#filter on only pov player
+	bulletevent_df = pd.merge(bulletevent_df, demo_df[['szMd5', 'bPOVId']], how = 'left', on = 'szMd5')
+	if pov_sprees_only:
+		bulletevent_df = bulletevent_df.loc[bulletevent_df['bAttacker'] == bulletevent_df['bPOVId']]
+
+	#helper variables for verbose
+	counter = 0
+	total_demos = bulletevent_df.szMd5.nunique()
+
+	for demo in bulletevent_df.szMd5.unique():
+		df_demo = bulletevent_df.loc[bulletevent_df['szMd5'] == demo]
+		df_demo = df_demo[df_demo['bRegion'] == 2]
+		demo_name = df_demo.demoName.unique()
+		match_name = df_demo.matchName.unique()
+		demo_pov = df_demo.bPOVId.unique()
+		counter += 1
+
+		for player in df_demo.bAttacker.unique():
+			df_cut = df_demo.loc[bulletevent_df['bAttacker'] == player]
+			player_name = df_cut.szCleanName.unique()
+			df_cut = df_cut.sort_values('dwTime')
+			arr = df_cut.as_matrix(columns = ['bAttacker', 'bTarget', 'bRegion', 'dwTime'])
+
+			timerestriction = maxtime_secs * 1000 #put it in seconds for rtcw time
+			spreecounter = 0
+			temp_sprees = []
+			total_rows = len(arr)
+
+			for row in range(len(arr)):
+				frag = arr[row, :]
+
+				#init first_spreetime
+				if row == 0:
+					first_spreetime = frag[3]      
+
+				#debug if dzTime is buggy (lower current dzTime vs first spree dzTime): restart counting
+				if frag[3] - first_spreetime < 0:
+					if (frag[0] != frag[1]):
+						spreecounter = 1
+						first_spreetime = frag[3]   
+						temp_sprees = []
+						temp_sprees.append(first_spreetime)
+					else:
+						spreecounter = 0
+						first_spreetime = frag[3]   
+						temp_sprees = []
+
+				#if current headshot is in the timerestriction, up the spreecount and append temp_sprees
+				if frag[3] - first_spreetime <= timerestriction:
+					if (frag[0] != frag[1]):
+						spreecounter += 1
+						temp_sprees.append(frag[3])
+
+				#if not, add a value to every list with spree details if minspree is met / reinitilize spreecounter and temp_sprees
+				else:
+					if spreecounter >= minspree:
+						pd_md5.append(demo)
+						pd_attacker.append(player)
+						pd_start_dwtime.append(temp_sprees[0])
+						pd_end_dwtime.append(temp_sprees[-1])
+						pd_spree_length.append(spreecounter)
+						pd_demo_name.append(demo_name[0])
+						pd_match_name.append(match_name[0])
+						pd_player_name.append(player_name[0])
+						pd_demo_pov.append(demo_pov[0])
+
+					if (frag[0] != frag[1]) and (frag[2] != 1):
+						spreecounter = 1
+						first_spreetime = frag[3]   
+						temp_sprees = []
+						temp_sprees.append(first_spreetime)
+
+					else:
+						spreecounter = 0
+						first_spreetime = frag[3]   
+						temp_sprees = []
+
+				#if last frag in the data, and we have reach the minspree, add entry
+				if row == (total_rows - 1):
+					if spreecounter >= minspree:
+						pd_md5.append(demo)
+						pd_attacker.append(player)
+						pd_start_dwtime.append(temp_sprees[0])
+						pd_end_dwtime.append(temp_sprees[-1])
+						pd_spree_length.append(spreecounter)
+						pd_demo_name.append(demo_name[0])
+						pd_match_name.append(match_name[0])
+						pd_player_name.append(player_name[0])
+						pd_demo_pov.append(demo_pov[0])
+
+		if counter % 100 == 0:
+			if verbose:
+				print 'scanned ' + str(counter) + ' demos of ' + str(total_demos) + ' demos in total'
+
+	print 'all done!'
+
+
+	#make final dataframe where 1 row is a spree with all the necessary info
+	df_spree = pd.DataFrame(
+	{'md5': pd_md5,
+	 'attacker': pd_attacker,
+	 'start': pd_start_dwtime,
+	 'end': pd_end_dwtime,
+	 'spreecount': pd_spree_length,
+	 'demo': pd_demo_name,
+	 'match': pd_match_name,
+	 'player': pd_player_name,
+	 'pov_id': pd_demo_pov
+	})
+
+	if len(df_spree):
+		#convert player names to valid names for windows filenaming
+		df_spree['player'] = df_spree.player.apply(lambda x: convert_names(x))
+
+		#make sure a buggy demo is not in there
+		df_spree = df_spree.loc[df_spree['match'] != 'rtcw_2003.06.25_qcon03-qual_gmpo_vs_clan-carnage_round2'].copy()
+		df_spree.reset_index(drop=True, inplace=True)
+
+	return df_spree
